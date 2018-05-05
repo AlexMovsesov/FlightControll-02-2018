@@ -17,7 +17,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 
 @CrossOrigin(origins = {
-        "127.0.0.1",
+        "91.76.249.91",
         "https://flightcontrolfrontend.herokuapp.com"
 }, allowCredentials = "true", maxAge = 3600)
 @RestController
