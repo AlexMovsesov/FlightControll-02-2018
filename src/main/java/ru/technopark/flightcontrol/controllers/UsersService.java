@@ -16,8 +16,10 @@ import javax.servlet.http.HttpSession;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-//@CrossOrigin(origins = "https://flight-control-test.herokuapp.com", allowCredentials = "true", maxAge = 3600)
-@CrossOrigin(origins = "*", allowCredentials = "true", maxAge = 3600)
+@CrossOrigin(origins = {
+        "127.0.0.1",
+        "https://flightcontrolfrontend.herokuapp.com"
+}, allowCredentials = "true", maxAge = 3600)
 @RestController
 @MultipartConfig
 @RequestMapping(value = "/api/user")
