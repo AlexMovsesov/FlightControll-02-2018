@@ -5,10 +5,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import ru.technopark.flightcontrol.dao.UsersManager;
 import ru.technopark.flightcontrol.models.User;
+import ru.technopark.flightcontrol.security.AuthenticationUserProvider;
 import ru.technopark.flightcontrol.validators.Validator;
 import ru.technopark.flightcontrol.wrappers.*;
 import javax.servlet.annotation.MultipartConfig;
@@ -17,18 +20,28 @@ import java.util.ArrayList;
 import java.util.HashMap;
 
 @CrossOrigin(origins = {
-        "91.76.249.91",
+        "*",
         "https://flightcontrolfrontend.herokuapp.com"
-}, allowCredentials = "true", maxAge = 3600)
+        },
+        allowCredentials = "true",
+        maxAge = 3600,
+        allowedHeaders = {"Content-Type", "X-CSRF-TOKEN"},
+        exposedHeaders = {"X-CSRF-TOKEN"}
+    )
 @RestController
 @MultipartConfig
-@RequestMapping(value = "/api/user")
+@RequestMapping(value = "/api", produces = MediaType.APPLICATION_JSON_VALUE)
 public class UsersService {
     private static final Logger LOGGER = LoggerFactory.getLogger(UsersService.class);
     private UsersManager manager;
+    private AuthenticationUserProvider authManager;
 
-    UsersService(UsersManager manager) {
+    UsersService(UsersManager manager, AuthenticationUserProvider authenticationManager) {
         this.manager = manager;
+        this.authManager = authenticationManager;
+        manager.createUser(new RegisterWrapper("vasya1", "vasya1@ya.ru", "123321", "123321", null), LOGGER);
+        manager.createUser(new RegisterWrapper("vasya2", "vasya2@ya.ru", "123321", "123321", null), LOGGER);
+        manager.createUser(new RegisterWrapper("vasya3", "vasya3@ya.ru", "123321", "123321", null), LOGGER);
     }
 
     private User prepareEnviron(HttpSession session) {
@@ -36,7 +49,31 @@ public class UsersService {
         return manager.getUser(userId);
     }
 
-    @PostMapping(value = "/register", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @GetMapping(value = "/users/logged", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity isLogged(HttpSession session) {
+         final User curUser = prepareEnviron(session);
+        return curUser == null
+                ? ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+                : ResponseEntity.ok().build();
+    }
+
+
+    @PostMapping(value = "/users/leaders", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity leaders(HttpSession session, @RequestBody PaginateWrapper request) {
+        final ArrayList<User> leaders;
+        final HashMap<String, Object> response = new HashMap<>();
+        try {
+            Validator.validate(request);
+            leaders = manager.getLeaders(request.getPage(), request.getSize());
+            response.put("leaders", leaders);
+            response.put("count", manager.getLeadersCount());
+        } catch (RequestParamsException exception) {
+            return ResponseEntity.badRequest().body(exception.getFieldErrors());
+        }
+        return  ResponseEntity.ok(response);
+    }
+
+    @PostMapping(value = "/entry/register", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity registerUser(HttpSession session,
                                        @RequestParam("username") String name,
                                        @RequestParam("email") String email,
@@ -54,7 +91,14 @@ public class UsersService {
             if (curUser == null) {
                 return ResponseEntity.badRequest().body(new FieldsError("user", " is used"));
             } else {
-                session.setAttribute("userId", curUser.getId());
+                final UsernamePasswordAuthenticationToken token =
+                        new UsernamePasswordAuthenticationToken(
+                                email,
+                                password,
+                                curUser.getAuthorities()
+                        );
+                final Authentication authentication = authManager.authenticate(token);
+                authManager.assign(authentication, session, curUser);
             }
         } catch (RequestParamsException exception) {
             return ResponseEntity.badRequest().body(exception.getFieldErrors());
@@ -62,25 +106,7 @@ public class UsersService {
         return ResponseEntity.ok().build();
     }
 
-    @GetMapping(value = "/get", consumes = "application/json")
-    public ResponseEntity getUser(HttpSession session) {
-        final User curUser = prepareEnviron(session);
-        if (curUser == null) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        }
-        return ResponseEntity.ok(curUser);
-    }
-
-    @GetMapping(value = "/logged", consumes = "application/json")
-    public ResponseEntity isLogged(HttpSession session) {
-        final User curUser = prepareEnviron(session);
-        return curUser == null
-                ? ResponseEntity.status(HttpStatus.FORBIDDEN).build()
-                : ResponseEntity.ok().build();
-    }
-
-
-    @PostMapping(value = "/authenticate", consumes = "application/json")
+    @PostMapping(value = "/entry/authenticate", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity authUser(HttpSession session, @RequestBody AuthWrapper request) {
         final User curUser = prepareEnviron(session);
         if (curUser != null) {
@@ -94,16 +120,37 @@ public class UsersService {
                 return ResponseEntity.badRequest().body("Unsaved user");
             }
             final boolean isValid = manager.authenticate(user, request.getPass());
-            if (isValid) {
-                session.setAttribute("userId", user.getId());
+            if (!isValid) {
+                throw new RequestParamsException("user", "is not assignable");
             }
+            final UsernamePasswordAuthenticationToken token =
+                    new UsernamePasswordAuthenticationToken(
+                            request.getEmail(),
+                            request.getPass(),
+                            user.getAuthorities()
+                    );
+            final Authentication authentication = authManager.authenticate(token);
+            authManager.assign(authentication, session, user);
+            return ResponseEntity.ok().build();
         } catch (RequestParamsException exception) {
             return ResponseEntity.badRequest().body(exception.getFieldErrors());
         }
-        return ResponseEntity.ok().build();
     }
 
-    @PostMapping(value = "/change", consumes = "application/json")
+    @GetMapping(value = "/user/get", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity getUser(HttpSession session) {
+        final User curUser = prepareEnviron(session);
+        if (curUser == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        return ResponseEntity.ok(curUser);
+    }
+
+
+
+
+
+    @PostMapping(value = "/user/change", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity changeUser(HttpSession session,
                                      @RequestParam(value = "username") String name,
                                      @RequestParam(value = "email") String email,
@@ -119,31 +166,15 @@ public class UsersService {
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping(value = "/logout", consumes = "application/json")
+    @PostMapping(value = "/user/logout", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> logout(HttpSession session) {
         final User curUser = prepareEnviron(session);
         if (curUser == null) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
-        session.removeAttribute("userId");
+        session.invalidate();
         return  ResponseEntity.ok().build();
     }
-
-    @PostMapping(value = "/leaders", consumes = "application/json")
-    public ResponseEntity leaders(HttpSession session, @RequestBody PaginateWrapper request) {
-        final ArrayList<User> leaders;
-        final HashMap<String, Object> response = new HashMap<>();
-        try {
-            Validator.validate(request);
-            leaders = manager.getLeaders(request.getPage(), request.getSize());
-            response.put("leaders", leaders);
-            response.put("count", manager.getLeadersCount());
-        } catch (RequestParamsException exception) {
-            return ResponseEntity.badRequest().body(exception.getFieldErrors());
-        }
-        return  ResponseEntity.ok(response);
-    }
-
 
 
 }

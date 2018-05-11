@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.tomcat.util.codec.binary.Base64;
 import org.apache.tomcat.util.codec.binary.StringUtils;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -11,6 +13,8 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Random;
 
 @JsonAutoDetect(
@@ -20,8 +24,9 @@ import java.util.Random;
         isGetterVisibility = JsonAutoDetect.Visibility.NONE,
         creatorVisibility = JsonAutoDetect.Visibility.NONE
 )
-public class User {
+public class User implements UserDetails {
 
+    @JsonProperty
     private Number id;
 
     @JsonProperty
@@ -53,7 +58,7 @@ public class User {
     }
 
     public void setAvatar(MultipartFile avatar) throws IOException {
-        if (avatar != null) {
+        if (avatar != null && avatar.getSize() > 0) {
             final StringBuilder base64Avatar = new StringBuilder();
             base64Avatar.append("data:");
             base64Avatar.append(avatar.getContentType());
@@ -117,5 +122,43 @@ public class User {
             newHash = "";
         }
         return this.hash.equals(newHash);
+    }
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        final Collection<GrantedAuthority> grantedAuthorities = new ArrayList<>();
+        final GrantedAuthority grantedAuthority = () -> "ROLE_USER";
+        grantedAuthorities.add(grantedAuthority);
+        return grantedAuthorities;
+    }
+
+    @Override
+    public String getPassword() {
+        return hash;
+    }
+
+    @Override
+    public String getUsername() {
+        return email;
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return true;
     }
 }

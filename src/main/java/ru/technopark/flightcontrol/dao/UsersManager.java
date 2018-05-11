@@ -9,6 +9,7 @@ import ru.technopark.flightcontrol.wrappers.RegisterWrapper;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -58,9 +59,14 @@ public final class UsersManager {
 
 
     public void changeUser(User user, RegisterWrapper params) {
-        user.setName(params.getUserName());
-        user.setEmail(params.getEmail());
-        user.changePass(params.getPassword());
+        try {
+            user.setName(params.getUserName());
+            user.setEmail(params.getEmail());
+            user.changePass(params.getPassword());
+            user.setAvatar(params.getImg());
+        } catch (IOException exception) {
+            //
+        }
     }
 
     private boolean userNotContains(Number id) {
@@ -83,8 +89,9 @@ public final class UsersManager {
         final int offset = (page - 1) * size;
         int toIndex = offset + size;
         if (offset + size > usersMap.size()) {
-            toIndex = usersMap.size() - offset;
+            toIndex = usersMap.size();
         }
+        Collections.reverse(ratingTable);
         return new ArrayList<>(ratingTable.subList(offset, toIndex));
     }
 
