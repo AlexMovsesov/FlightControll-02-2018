@@ -20,7 +20,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 
 @CrossOrigin(origins = {
-        "*",
         "https://flightcontrolfrontend.herokuapp.com"
         },
         allowCredentials = "true",
